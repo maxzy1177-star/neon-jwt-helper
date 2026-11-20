@@ -8,14 +8,12 @@
 </head>
 <body>
   <h2>MENFESS Neon JWT Helper</h2>
-  <p>Pengujian login dan JWT Neon Auth.</p>
+  <p>Pengujian Neon Auth dan JWT.</p>
 
   <button id="login">Login dengan GitHub</button>
   <button id="token">Ambil JWT</button>
   <button id="check">Periksa Login</button>
-  <button id="logout">Logout</button>
-
-  <pre id="hasil">Memuat Neon Auth...</pre>
+  <pre id="hasil">Memuat Neon...</pre>
 
   <script type="module">
     const AUTH_URL =
@@ -27,59 +25,38 @@
 
     async function init() {
       try {
-        const { createAuthClient } =
-          await import("https://esm.sh/@neondatabase/auth");
+        const sdk = await import(
+          "https://esm.sh/@neondatabase/auth"
+        );
 
-        auth = createAuthClient(AUTH_URL);
+        auth = sdk.createAuthClient(AUTH_URL, {
+          adapter: sdk.SupabaseAuthAdapter()
+        });
 
-        hasil.textContent = "Neon Auth siap digunakan.";
-      } catch (error) {
-        hasil.textContent =
-          "Gagal memuat SDK: " + error.message;
+        hasil.textContent = "Neon Auth siap.";
+      } catch (e) {
+        hasil.textContent = "Inisialisasi gagal: " + e.message;
       }
     }
 
     document.getElementById("login").onclick = async () => {
       try {
-        hasil.textContent = "Menghubungkan ke GitHub...";
+        hasil.textContent = "Membuka login GitHub...";
 
-        const result = await auth.signIn.social({
+        const result = await auth.signInWithOAuth({
           provider: "github",
-          callbackURL:
-            location.origin + location.pathname
+          options: {
+            redirectTo: location.origin + location.pathname
+          }
         });
 
-        if (result?.error) throw result.error;
+        if (result.error) throw result.error;
 
-        if (result?.data?.url) {
+        if (result.data?.url) {
           location.assign(result.data.url);
         }
-      } catch (error) {
-        hasil.textContent =
-          "Login gagal: " + error.message;
-      }
-    };
-
-    document.getElementById("token").onclick = async () => {
-      try {
-        hasil.textContent = "Mengambil JWT Neon...";
-
-        const jwt = await auth.getJWTToken();
-
-        if (!jwt) {
-          hasil.textContent =
-            "JWT kosong. Silakan login terlebih dahulu.";
-          return;
-        }
-
-        hasil.textContent =
-          "JWT BERHASIL DIPEROLEH!\n\n" +
-          "Token tersedia dan tidak ditampilkan demi keamanan.\n" +
-          "Panjang token: " + jwt.length + " karakter.";
-
-      } catch (error) {
-        hasil.textContent =
-          "Gagal mengambil JWT: " + error.message;
+      } catch (e) {
+        hasil.textContent = "Login gagal: " + e.message;
       }
     };
 
@@ -89,23 +66,39 @@
 
         if (result.error) throw result.error;
 
-        hasil.textContent = result.data?.user
-          ? "LOGIN BERHASIL\nEmail: " +
-            result.data.user.email
-          : "Belum login.";
-      } catch (error) {
-        hasil.textContent =
-          "Pemeriksaan gagal: " + error.message;
+        hasil.textContent = result.data?.session
+          ? "LOGIN BERHASIL"
+          : "Belum login. Silakan login GitHub.";
+      } catch (e) {
+        hasil.textContent = "Pemeriksaan gagal: " + e.message;
       }
     };
 
-    document.getElementById("logout").onclick = async () => {
+    document.getElementById("token").onclick = async () => {
       try {
-        await auth.signOut();
-        hasil.textContent = "Berhasil logout.";
-      } catch (error) {
+        hasil.textContent = "Mengambil JWT...";
+
+        const result = await auth.getSession({
+          forceFetch: true
+        });
+
+        if (result.error) throw result.error;
+
+        const jwt = result.data?.session?.access_token;
+
+        if (!jwt) {
+          hasil.textContent =
+            "JWT belum tersedia. Login ulang terlebih dahulu.";
+          return;
+        }
+
         hasil.textContent =
-          "Logout gagal: " + error.message;
+          "JWT BERHASIL DIPEROLEH!\n" +
+          "Panjang token: " + jwt.length +
+          " karakter.\n\nToken tidak ditampilkan demi keamanan.";
+
+      } catch (e) {
+        hasil.textContent = "Gagal mengambil JWT: " + e.message;
       }
     };
 
