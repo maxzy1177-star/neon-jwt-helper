@@ -8,75 +8,58 @@
 </head>
 <body>
   <h2>MENFESS Neon JWT Helper</h2>
-  <p>Pengujian Neon Auth dan JWT.</p>
+  <p>Pengujian login dan pengambilan JWT Neon.</p>
 
-  <button id="login">Login dengan GitHub</button>
+  <button id="login">Login GitHub</button>
   <button id="token">Ambil JWT</button>
-  <button id="check">Periksa Login</button>
-  <pre id="hasil">Memuat Neon...</pre>
+  <pre id="hasil">Belum diperiksa.</pre>
 
   <script type="module">
+    import {
+      createAuthClient,
+      SupabaseAuthAdapter
+    } from "https://esm.sh/@neondatabase/auth";
+
     const AUTH_URL =
       "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
 
     const hasil = document.getElementById("hasil");
 
-    let auth;
+    const auth = createAuthClient(AUTH_URL, {
+      adapter: SupabaseAuthAdapter()
+    });
 
-    async function init() {
-      try {
-        const sdk = await import(
-          "https://esm.sh/@neondatabase/auth"
-        );
-
-        auth = sdk.createAuthClient(AUTH_URL, {
-          adapter: sdk.SupabaseAuthAdapter()
-        });
-
-        hasil.textContent = "Neon Auth siap.";
-      } catch (e) {
-        hasil.textContent = "Inisialisasi gagal: " + e.message;
-      }
-    }
+    hasil.textContent =
+      "SDK dimuat. getSession: " +
+      typeof auth.getSession;
 
     document.getElementById("login").onclick = async () => {
+      hasil.textContent = "Menghubungkan ke GitHub...";
       try {
-        hasil.textContent = "Membuka login GitHub...";
-
         const result = await auth.signInWithOAuth({
           provider: "github",
           options: {
-            redirectTo: location.origin + location.pathname
+            redirectTo: location.href
           }
         });
 
         if (result.error) throw result.error;
 
-        if (result.data?.url) {
-          location.assign(result.data.url);
-        }
+        hasil.textContent =
+          "Permintaan login dikirim. Selesaikan login GitHub.";
       } catch (e) {
         hasil.textContent = "Login gagal: " + e.message;
       }
     };
 
-    document.getElementById("check").onclick = async () => {
-      try {
-        const result = await auth.getSession();
-
-        if (result.error) throw result.error;
-
-        hasil.textContent = result.data?.session
-          ? "LOGIN BERHASIL"
-          : "Belum login. Silakan login GitHub.";
-      } catch (e) {
-        hasil.textContent = "Pemeriksaan gagal: " + e.message;
-      }
-    };
-
     document.getElementById("token").onclick = async () => {
+      hasil.textContent = "Memeriksa sesi Neon...";
       try {
-        hasil.textContent = "Mengambil JWT...";
+        if (typeof auth.getSession !== "function") {
+          throw new Error(
+            "getSession tidak tersedia. Periksa pemuatan SDK."
+          );
+        }
 
         const result = await auth.getSession({
           forceFetch: true
@@ -88,21 +71,23 @@
 
         if (!jwt) {
           hasil.textContent =
-            "JWT belum tersedia. Login ulang terlebih dahulu.";
+            "Sesi belum ditemukan. Silakan login GitHub dahulu.";
           return;
         }
 
-        hasil.textContent =
-          "JWT BERHASIL DIPEROLEH!\n" +
-          "Panjang token: " + jwt.length +
-          " karakter.\n\nToken tidak ditampilkan demi keamanan.";
+        if (jwt.split(".").length !== 3) {
+          throw new Error("Token yang diterima bukan format JWT.");
+        }
 
+        hasil.textContent =
+          "BERHASIL: JWT Neon diperoleh.\n" +
+          "Panjang token: " + jwt.length +
+          " karakter.\n" +
+          "Token tidak ditampilkan demi keamanan.";
       } catch (e) {
         hasil.textContent = "Gagal mengambil JWT: " + e.message;
       }
     };
-
-    init();
   </script>
 </body>
 </html>
