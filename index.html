@@ -4,46 +4,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MENFESS Neon JWT</title>
+  <title>MENFESS Neon Auth Test</title>
 </head>
 <body>
-  <h2>MENFESS Neon JWT Helper</h2>
-  <p>Halaman ini untuk pengujian koneksi Neon Auth.</p>
-  <button id="login">Login Neon</button>
-  <button id="token">Ambil JWT</button>
-  <pre id="hasil">Belum terhubung.</pre>
+  <h2>MENFESS Neon Auth</h2>
+  <p>Pengujian login GitHub OAuth Neon.</p>
+
+  <button id="login">Login dengan GitHub</button>
+  <button id="check">Periksa Status Login</button>
+  <button id="logout">Logout</button>
+
+  <pre id="hasil">Memuat Neon Auth...</pre>
 
   <script type="module">
-    import { createAuthClient } from
-      "https://esm.sh/@neondatabase/auth";
+    const AUTH_URL =
+      "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
 
-    const AUTH_URL = "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
-
-    const auth = createAuthClient(AUTH_URL);
     const hasil = document.getElementById("hasil");
 
-    document.getElementById("login").onclick = async () => {
-      hasil.textContent = "Login menggunakan akun Neon...";
+    let auth;
+
+    function tampilkanError(error) {
+      hasil.textContent =
+        "ERROR: " + (error?.message || String(error));
+    }
+
+    async function mulai() {
       try {
-        await auth.signIn.social({
+        const { createAuthClient } =
+          await import("https://esm.sh/@neondatabase/auth");
+
+        auth = createAuthClient(AUTH_URL);
+
+        hasil.textContent = "Neon Auth berhasil dimuat.";
+        await periksaLogin();
+      } catch (error) {
+        tampilkanError(error);
+      }
+    }
+
+    async function periksaLogin() {
+      try {
+        const result = await auth.getSession();
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        if (result.data?.user) {
+          hasil.textContent =
+            "LOGIN BERHASIL\n" +
+            "Email: " + result.data.user.email;
+        } else {
+          hasil.textContent = "Belum login ke Neon.";
+        }
+      } catch (error) {
+        tampilkanError(error);
+      }
+    }
+
+    document.getElementById("login").onclick = async () => {
+      try {
+        hasil.textContent = "Menghubungkan ke GitHub...";
+
+        const result = await auth.signIn.social({
           provider: "github",
-          callbackURL: location.href
+          callbackURL:
+            window.location.origin + window.location.pathname
         });
-      } catch (e) {
-        hasil.textContent = "Login gagal: " + e.message;
+
+        if (result?.error) {
+          throw result.error;
+        }
+
+        if (result?.data?.url) {
+          window.location.assign(result.data.url);
+        }
+      } catch (error) {
+        tampilkanError(error);
       }
     };
 
-    document.getElementById("token").onclick = async () => {
+    document.getElementById("check").onclick =
+      periksaLogin;
+
+    document.getElementById("logout").onclick = async () => {
       try {
-        const jwt = await auth.getJWTToken();
-        hasil.textContent = jwt
-          ? "JWT berhasil diperoleh. Jangan bagikan token ini."
-          : "JWT kosong. Login terlebih dahulu.";
-      } catch (e) {
-        hasil.textContent = "Gagal: " + e.message;
+        await auth.signOut();
+        hasil.textContent = "Sudah logout.";
+      } catch (error) {
+        tampilkanError(error);
       }
     };
+
+    mulai();
   </script>
 </body>
 </html>
+
