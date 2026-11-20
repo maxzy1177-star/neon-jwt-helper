@@ -1,0 +1,49 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MENFESS Neon JWT</title>
+</head>
+<body>
+  <h2>MENFESS Neon JWT Helper</h2>
+  <p>Halaman ini untuk pengujian koneksi Neon Auth.</p>
+  <button id="login">Login Neon</button>
+  <button id="token">Ambil JWT</button>
+  <pre id="hasil">Belum terhubung.</pre>
+
+  <script type="module">
+    import { createAuthClient } from
+      "https://esm.sh/@neondatabase/auth";
+
+    const AUTH_URL = "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
+
+    const auth = createAuthClient(AUTH_URL);
+    const hasil = document.getElementById("hasil");
+
+    document.getElementById("login").onclick = async () => {
+      hasil.textContent = "Login menggunakan akun Neon...";
+      try {
+        await auth.signIn.social({
+          provider: "github",
+          callbackURL: location.href
+        });
+      } catch (e) {
+        hasil.textContent = "Login gagal: " + e.message;
+      }
+    };
+
+    document.getElementById("token").onclick = async () => {
+      try {
+        const jwt = await auth.getJWTToken();
+        hasil.textContent = jwt
+          ? "JWT berhasil diperoleh. Jangan bagikan token ini."
+          : "JWT kosong. Login terlebih dahulu.";
+      } catch (e) {
+        hasil.textContent = "Gagal: " + e.message;
+      }
+    };
+  </script>
+</body>
+</html>
