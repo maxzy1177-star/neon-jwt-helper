@@ -5,37 +5,92 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MENFESS Neon JWT Helper</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 16px;
+    }
+    button {
+      padding: 12px;
+      margin: 5px;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #eee;
+      padding: 12px;
+    }
+  </style>
 </head>
 <body>
   <h2>MENFESS Neon JWT Helper</h2>
-  <p>Pengujian login dan pengambilan JWT Neon.</p>
 
   <button id="login">Login GitHub</button>
-  <button id="token">Ambil JWT</button>
-  <pre id="hasil">Belum diperiksa.</pre>
+  <button id="ambil">Ambil JWT</button>
+  <button id="salin" disabled>Salin JWT</button>
+
+  <pre id="hasil">Memuat SDK Neon...</pre>
 
   <script type="module">
-    import {
-      createAuthClient,
-      SupabaseAuthAdapter
-    } from "https://esm.sh/@neondatabase/auth";
-
     const AUTH_URL =
       "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
 
     const hasil = document.getElementById("hasil");
+    const tombolSalin = document.getElementById("salin");
 
-    const auth = createAuthClient(AUTH_URL, {
-      adapter: SupabaseAuthAdapter()
-    });
+    let auth = null;
+    let jwt = "";
 
-    hasil.textContent =
-      "SDK dimuat. getSession: " +
-      typeof auth.getSession;
+    // 1. MEMUAT SDK
+    try {
+      const sdk = await import(
+        "https://esm.sh/@neondatabase/auth?bundle"
+      );
 
+      if (
+        typeof sdk.createAuthClient !== "function" ||
+        typeof sdk.SupabaseAuthAdapter !== "function"
+      ) {
+        throw new Error(
+          "Ekspor SDK Neon tidak ditemukan."
+        );
+      }
+
+      auth = sdk.createAuthClient(AUTH_URL, {
+        adapter: sdk.SupabaseAuthAdapter()
+      });
+
+      if (typeof auth.getSession !== "function") {
+        throw new Error("getSession tidak tersedia.");
+      }
+
+      if (typeof auth.signInWithOAuth !== "function") {
+        throw new Error("signInWithOAuth tidak tersedia.");
+      }
+
+      hasil.textContent =
+        "SDK NEON SIAP\n" +
+        "createAuthClient: OK\n" +
+        "SupabaseAuthAdapter: OK\n" +
+        "getSession: OK\n" +
+        "OAuth: OK";
+
+    } catch (error) {
+      hasil.textContent =
+        "GAGAL MEMUAT SDK:\n" + error.message;
+    }
+
+    // 2. LOGIN GITHUB
     document.getElementById("login").onclick = async () => {
-      hasil.textContent = "Menghubungkan ke GitHub...";
       try {
+        if (!auth) {
+          throw new Error("SDK belum berhasil dimuat.");
+        }
+
+        hasil.textContent = "Menghubungkan ke GitHub...";
+
         const result = await auth.signInWithOAuth({
           provider: "github",
           options: {
@@ -43,51 +98,96 @@
           }
         });
 
-        if (result.error) throw result.error;
+        if (result.error) {
+          throw result.error;
+        }
 
         hasil.textContent =
-          "Permintaan login dikirim. Selesaikan login GitHub.";
-      } catch (e) {
-        hasil.textContent = "Login gagal: " + e.message;
+          "Login sedang diproses. Selesaikan autentikasi GitHub.";
+
+      } catch (error) {
+        hasil.textContent =
+          "LOGIN GAGAL:\n" + error.message;
       }
     };
 
-    document.getElementById("token").onclick = async () => {
-      hasil.textContent = "Memeriksa sesi Neon...";
+    // 3. AMBIL JWT NEON
+    document.getElementById("ambil").onclick = async () => {
+      jwt = "";
+      tombolSalin.disabled = true;
+
       try {
-        if (typeof auth.getSession !== "function") {
-          throw new Error(
-            "getSession tidak tersedia. Periksa pemuatan SDK."
-          );
+        if (!auth) {
+          throw new Error("SDK Neon tidak tersedia.");
         }
 
-        const result = await auth.getSession({
+        hasil.textContent = "Mengambil sesi Neon...";
+
+        const response = await auth.getSession({
           forceFetch: true
         });
 
-        if (result.error) throw result.error;
-
-        const jwt = result.data?.session?.access_token;
-
-        if (!jwt) {
-          hasil.textContent =
-            "Sesi belum ditemukan. Silakan login GitHub dahulu.";
-          return;
+        if (response.error) {
+          throw response.error;
         }
 
-        if (jwt.split(".").length !== 3) {
-          throw new Error("Token yang diterima bukan format JWT.");
+        const session = response.data?.session;
+
+        if (!session) {
+          throw new Error(
+            "Sesi kosong. Login GitHub terlebih dahulu."
+          );
         }
+
+        const accessToken = session.access_token;
+
+        if (!accessToken) {
+          throw new Error(
+            "access_token tidak ditemukan pada sesi."
+          );
+        }
+
+        const parts = accessToken.split(".");
+
+        if (parts.length !== 3) {
+          throw new Error(
+            "Token bukan JWT dengan format tiga bagian."
+          );
+        }
+
+        jwt = accessToken;
+        tombolSalin.disabled = false;
 
         hasil.textContent =
-          "BERHASIL: JWT Neon diperoleh.\n" +
-          "Panjang token: " + jwt.length +
-          " karakter.\n" +
-          "Token tidak ditampilkan demi keamanan.";
-      } catch (e) {
-        hasil.textContent = "Gagal mengambil JWT: " + e.message;
+          "BERHASIL: JWT NEON TERAMBIL\n" +
+          "Panjang token: " + jwt.length + " karakter\n" +
+          "Format JWT: VALID\n" +
+          "Token siap digunakan.";
+
+      } catch (error) {
+        hasil.textContent =
+          "GAGAL MENGAMBIL JWT:\n" + error.message;
+      }
+    };
+
+    // 4. SALIN JWT
+    tombolSalin.onclick = async () => {
+      try {
+        if (!jwt) {
+          throw new Error("JWT masih kosong.");
+        }
+
+        await navigator.clipboard.writeText(jwt);
+
+        hasil.textContent =
+          "JWT berhasil disalin. Jaga kerahasiaannya.";
+
+      } catch (error) {
+        hasil.textContent =
+          "GAGAL MENYALIN:\n" + error.message;
       }
     };
   </script>
 </body>
 </html>
+
