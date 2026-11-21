@@ -5,165 +5,244 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MENFESS Neon JWT Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+
+    button {
+      padding: 12px 16px;
+      margin: 5px 3px;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: white;
+      padding: 14px;
+      border-radius: 6px;
+    }
+  </style>
 </head>
+
 <body>
   <h2>MENFESS Neon JWT Helper</h2>
+  <p>Login GitHub dan mengambil JWT Neon.</p>
 
   <button id="login">Login GitHub</button>
   <button id="ambil">Ambil JWT</button>
   <button id="salin" disabled>Salin JWT</button>
 
-  <pre id="hasil">Memuat SDK...</pre>
+  <pre id="hasil">Memuat SDK Neon...</pre>
 
   <script type="module">
+
     const AUTH_URL =
       "https://ep-floral-mode-bdx8y2cd.neonauth.c-8.us-east-2.aws.neon.tech/neondb/auth";
 
     const hasil = document.getElementById("hasil");
-    const salin = document.getElementById("salin");
+    const tombolLogin = document.getElementById("login");
+    const tombolAmbil = document.getElementById("ambil");
+    const tombolSalin = document.getElementById("salin");
 
     let auth = null;
     let jwt = "";
-    let initError = "";
+    let sdkError = "";
 
-    // INISIALISASI SDK
-    try {
-      const sdk = await import(
-        "https://esm.sh/@neondatabase/auth"
-      );
+    // =================================
+    // 1. MEMUAT SDK NEON
+    // =================================
 
-      if (typeof sdk.createAuthClient !== "function") {
-        throw new Error("createAuthClient tidak ditemukan.");
+    async function initNeon() {
+      try {
+        hasil.textContent = "Menghubungkan SDK Neon...";
+
+        const [sdk, adapterModule] = await Promise.all([
+          import("https://esm.sh/@neondatabase/auth"),
+          import("https://esm.sh/@neondatabase/auth/vanilla/adapters")
+        ]);
+
+        if (typeof sdk.createAuthClient !== "function") {
+          throw new Error("createAuthClient tidak ditemukan.");
+        }
+
+        if (
+          typeof adapterModule.SupabaseAuthAdapter !== "function"
+        ) {
+          throw new Error("SupabaseAuthAdapter tidak ditemukan.");
+        }
+
+        auth = sdk.createAuthClient(AUTH_URL, {
+          adapter: adapterModule.SupabaseAuthAdapter()
+        });
+
+        if (typeof auth.getSession !== "function") {
+          throw new Error("getSession tidak tersedia.");
+        }
+
+        if (typeof auth.signInWithOAuth !== "function") {
+          throw new Error("signInWithOAuth tidak tersedia.");
+        }
+
+        hasil.textContent =
+          "SDK NEON BERHASIL DIMUAT\n" +
+          "createAuthClient: OK\n" +
+          "SupabaseAuthAdapter: OK\n" +
+          "getSession: OK\n" +
+          "OAuth: OK\n\n" +
+          "Silakan login GitHub.";
+
+      } catch (error) {
+        auth = null;
+        sdkError = error.message || String(error);
+
+        hasil.textContent =
+          "GAGAL MEMUAT SDK NEON\n" + sdkError;
       }
-
-      if (typeof sdk.SupabaseAuthAdapter !== "function") {
-        throw new Error("SupabaseAuthAdapter tidak ditemukan.");
-      }
-
-      auth = sdk.createAuthClient(AUTH_URL, {
-        adapter: sdk.SupabaseAuthAdapter()
-      });
-
-      if (typeof auth.getSession !== "function") {
-        throw new Error("getSession tidak tersedia.");
-      }
-
-      if (typeof auth.signInWithOAuth !== "function") {
-        throw new Error("signInWithOAuth tidak tersedia.");
-      }
-
-      hasil.textContent =
-        "SDK NEON BERHASIL DIMUAT\n" +
-        "Adapter: OK\n" +
-        "getSession: OK\n" +
-        "OAuth: OK";
-
-    } catch (e) {
-      initError = e?.message || String(e);
-      auth = null;
-
-      hasil.textContent =
-        "GAGAL MEMUAT SDK NEON:\n" + initError;
     }
 
-    // LOGIN GITHUB
-    document.getElementById("login").onclick =
-      async () => {
-        try {
-          if (!auth) {
-            throw new Error(initError || "SDK belum tersedia.");
-          }
+    // =================================
+    // 2. LOGIN GITHUB
+    // =================================
 
-          hasil.textContent = "Membuka login GitHub...";
-
-          const result = await auth.signInWithOAuth({
-            provider: "github",
-            options: {
-              redirectTo: location.href
-            }
-          });
-
-          if (result.error) throw result.error;
-
-          hasil.textContent =
-            "Login diproses. Selesaikan autentikasi GitHub.";
-
-        } catch (e) {
-          hasil.textContent =
-            "LOGIN GAGAL:\n" + (e.message || String(e));
-        }
-      };
-
-    // AMBIL JWT
-    document.getElementById("ambil").onclick =
-      async () => {
-        jwt = "";
-        salin.disabled = true;
-
-        try {
-          if (!auth) {
-            throw new Error(initError || "SDK belum tersedia.");
-          }
-
-          hasil.textContent = "Memeriksa sesi Neon...";
-
-          const response = await auth.getSession({
-            forceFetch: true
-          });
-
-          if (response.error) throw response.error;
-
-          const session = response.data?.session;
-
-          if (!session) {
-            throw new Error(
-              "Sesi kosong. Login GitHub terlebih dahulu."
-            );
-          }
-
-          const token = session.access_token;
-
-          if (!token) {
-            throw new Error("access_token tidak ditemukan.");
-          }
-
-          if (token.split(".").length !== 3) {
-            throw new Error("Format JWT tidak valid.");
-          }
-
-          jwt = token;
-          salin.disabled = false;
-
-          hasil.textContent =
-            "BERHASIL: JWT NEON TERAMBIL\n" +
-            "Panjang: " + jwt.length + " karakter\n" +
-            "Format JWT: VALID\n" +
-            "JWT siap disalin.";
-
-        } catch (e) {
-          hasil.textContent =
-            "GAGAL MENGAMBIL JWT:\n" +
-            (e.message || String(e));
-        }
-      };
-
-    // SALIN JWT
-    salin.onclick = async () => {
+    tombolLogin.onclick = async function () {
       try {
-        if (!jwt) throw new Error("JWT kosong.");
+        if (!auth) {
+          throw new Error(
+            sdkError || "SDK Neon belum tersedia."
+          );
+        }
+
+        hasil.textContent = "Memulai login GitHub...";
+
+        const result = await auth.signInWithOAuth({
+          provider: "github",
+          options: {
+            redirectTo: location.href
+          }
+        });
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        hasil.textContent =
+          "Login GitHub sedang diproses.\n" +
+          "Selesaikan autentikasi dan kembali ke halaman ini.";
+
+      } catch (error) {
+        hasil.textContent =
+          "LOGIN GAGAL:\n" +
+          (error.message || String(error));
+      }
+    };
+
+    // =================================
+    // 3. AMBIL JWT
+    // =================================
+
+    tombolAmbil.onclick = async function () {
+      jwt = "";
+      tombolSalin.disabled = true;
+
+      try {
+        if (!auth) {
+          throw new Error(
+            sdkError || "SDK Neon belum tersedia."
+          );
+        }
+
+        hasil.textContent = "Memeriksa sesi login...";
+
+        const response = await auth.getSession({
+          forceFetch: true
+        });
+
+        if (response.error) {
+          throw response.error;
+        }
+
+        const session = response.data?.session;
+
+        if (!session) {
+          throw new Error(
+            "Sesi tidak ditemukan. Login GitHub terlebih dahulu."
+          );
+        }
+
+        const accessToken = session.access_token;
+
+        if (!accessToken) {
+          throw new Error(
+            "access_token kosong pada sesi Neon."
+          );
+        }
+
+        const parts = accessToken.split(".");
+
+        if (parts.length !== 3) {
+          throw new Error(
+            "Token yang diterima bukan JWT tiga bagian."
+          );
+        }
+
+        jwt = accessToken;
+        tombolSalin.disabled = false;
+
+        hasil.textContent =
+          "BERHASIL: JWT NEON TERAMBIL\n\n" +
+          "Panjang JWT: " + jwt.length + " karakter\n" +
+          "Struktur JWT: VALID\n" +
+          "Tombol Salin JWT sudah aktif.\n\n" +
+          "Jangan bagikan token ini.";
+
+      } catch (error) {
+        hasil.textContent =
+          "GAGAL MENGAMBIL JWT:\n" +
+          (error.message || String(error));
+      }
+    };
+
+    // =================================
+    // 4. SALIN JWT
+    // =================================
+
+    tombolSalin.onclick = async function () {
+      try {
+        if (!jwt) {
+          throw new Error("JWT belum tersedia.");
+        }
 
         await navigator.clipboard.writeText(jwt);
 
         hasil.textContent =
-          "JWT berhasil disalin. Simpan dengan aman.";
+          "JWT berhasil disalin.\n" +
+          "Simpan sebagai rahasia di TeleBotHost.";
 
-      } catch (e) {
+      } catch (error) {
         hasil.textContent =
-          "GAGAL MENYALIN:\n" + (e.message || String(e));
+          "GAGAL MENYALIN JWT:\n" +
+          (error.message || String(error));
       }
     };
+
+    // MULAI
+    initNeon();
+
   </script>
 </body>
 </html>
-
-
